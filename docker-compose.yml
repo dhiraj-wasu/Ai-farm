@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+
+  fastapi_service:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  image_worker:
+    build: .
+    command: python app/worker_image.py
+    depends_on:
+      - redis
+
+  text_worker:
+    build: .
+    command: python app/worker_text.py
+    depends_on:
+      - redis
