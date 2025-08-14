@@ -1,1 +1,3 @@
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8080
+sudo service redis-server start
+python -m workers.text_worker

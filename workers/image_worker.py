@@ -17,6 +17,7 @@ tasks_in_progress = 0
 
 # Heartbeat sender
 def heartbeat():
+    global tasks_in_progress
     while True:
         redis_conn.hset(f"worker:{WORKER_ID}", mapping={
             "last_seen": time.time(),
@@ -31,16 +32,20 @@ threading.Thread(target=heartbeat, daemon=True).start()
 while True:
     _, task_json = redis_conn.brpop("image_queue")
     task = json.loads(task_json)
-    task_id = task["id"]
+    task_id = task["task_id"]
     task_key = f"task:{task_id}"
 
     print(f"Processing task {task_id}")
     tasks_in_progress += 1
 
+    # CHANGE ✅ — Decode retries to int safely
     retries = int(redis_conn.hget(task_key, "retries") or 0)
 
-    start_time = redis_conn.hget(task_key, "start_time")
-    if start_time and (time.time() - float(start_time)) > TIMEOUT_LIMIT:
+    # CHANGE ✅ — Decode start_time to float only if exists
+    start_time_val = redis_conn.hget(task_key, "start_time")
+    start_time = float(start_time_val) if start_time_val else None
+
+    if start_time and (time.time() - start_time) > TIMEOUT_LIMIT:
         print(f"Task {task_id} timed out")
         if retries < MAX_RETRIES:
             redis_conn.hincrby(task_key, "retries", 1)
@@ -58,6 +63,7 @@ while True:
     })
 
     try:
+        # CHANGE ✅ — Ensure base64 decoding works properly
         img_data = base64.b64decode(task["data"])
         npimg = np.frombuffer(img_data, dtype=np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
@@ -65,6 +71,7 @@ while True:
         faces = face_cascade.detectMultiScale(img, 1.1, 4)
         result = {"faces_detected": len(faces)}
 
+        # CHANGE ✅ — Store result as JSON string in Redis
         redis_conn.hset(task_key, mapping={
             "status": "done",
             "end_time": time.time(),

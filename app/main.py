@@ -1,14 +1,29 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, Form
 from app.models import TaskRequest
 from app.redis_queue import enqueue_task,get_status, get_result
-from redis_queue import redis_conn
+from app.redis_queue import redis_conn
 import time
+
 app = FastAPI()
+
+@app.post("/enqueue")
+async def enqueue_image_task(file: UploadFile, task_type: str = Form("image")):
+    """
+    Accepts an image file directly via multipart/form-data.
+    Automatically Base64 encodes before enqueuing.
+    """
+    file_bytes = await file.read()
+    task_id = enqueue_task(task_type, file_bytes)  # bytes will be encoded in enqueue_task
+    return {"task_id": task_id}
 
 @app.post("/submit-task")
 def submit_task(task: TaskRequest):
-    task_id = enqueue_task(task.type, task.data)
+    """
+    Accepts JSON with already Base64-encoded image or plain text.
+    """
+    task_id = enqueue_task(task.type, task.data)  # already safe for JSON
     return {"task_id": task_id}
+
 
 @app.get("/status/{task_id}")
 def status(task_id: str):
@@ -17,7 +32,6 @@ def status(task_id: str):
 
 @app.get("/result/{task_id}")
 def result(task_id: str):
-
     return get_result(task_id)
 
 @app.get("/workers")
